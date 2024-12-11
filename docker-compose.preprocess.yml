@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  updater:
+    image: alpine
+    container_name: updater
+    volumes:
+      - ./data:/data
+    entrypoint: >
+      sh -c "
+      echo '0 0 1 * * curl -o /data/israel-and-palestine-latest.osm.pbf https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf &&
+      [ -f /data/israel-and-palestine-latest.osm.pbf ] &&
+      docker-compose -f docker-compose.preprocessor.yml up osrm-preprocess' > /etc/crontabs/root &&
+      crond -f
+      "
+
+  osrm-preprocess:
+    image: osrm/osrm-backend
+    container_name: osrm_preprocess
+    volumes:
+      - ./data:/data
+    entrypoint: >
+      sh -c "
+      osrm-extract -p /opt/car.lua /data/israel-and-palestine-latest.osm.pbf &&
+      osrm-contract /data/israel-and-palestine-latest.osrm
+      "

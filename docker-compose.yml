@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routePlan_app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./data:/usr/src/app/data
+      - /usr/src/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - ORSM_URL=http://osrm:5000/route/v1/driving
+    depends_on:
+      - osrm
+    command: npm run dev
+
+  osrm:
+    image: osrm/osrm-backend
+    container_name: osrm
+    volumes:
+      - ./data:/data
+    ports:
+      - "5000:5000"
+    command: osrm-routed /data/israel-and-palestine-latest.osrm
