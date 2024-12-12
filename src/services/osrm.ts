@@ -1,5 +1,7 @@
 import axios from "axios";
 import { cacheRoute, getCachedRoute } from "./redis";
+import dotenv from "dotenv";
+dotenv.config();
 
 if (!process.env.ORSM_URL) {
   throw new Error("ORSM_URL is not defined in the environment variables.");
@@ -14,7 +16,6 @@ export const getRouteFromOSRM = async (
   start: Coordinates,
   end: Coordinates
 ) => {
-  // Validate environment variable
   if (!process.env.ORSM_URL) {
     throw new Error("ORSM_URL is not defined in the environment variables.");
   }

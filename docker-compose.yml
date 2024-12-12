@@ -19,7 +19,7 @@ services:
     command: npm run dev
 
   osrm:
-    image: osrm/osrm-backend:v5.26.0
+    image: osrm/osrm-backend
     container_name: osrm
     volumes:
       - ./data:/data

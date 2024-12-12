@@ -1,7 +1,8 @@
 import { Request, Response, Router } from "express";
-import { geocodeAddress } from "../services/nominatim";
 import { getRouteFromOSRM } from "../services/osrm";
 import { isInIsrael } from "../tools";
+import { Database } from "../DB/db";
+const db = new Database();
 
 const router: Router = Router();
 
@@ -59,8 +60,8 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const startCoords = await geocodeAddress(startAddress as string);
-    const endCoords = await geocodeAddress(endAddress as string);
+    const startCoords = await db.getCoordinates(startAddress as string);
+    const endCoords = await db.getCoordinates(endAddress as string);
 
     if (!startCoords || !endCoords) {
       res

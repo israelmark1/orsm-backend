@@ -3,10 +3,13 @@ import dotenv from "dotenv";
 import router from "./controllers/routes";
 import cors from "cors";
 import { initCache } from "./services/redis";
+import { Database } from "./DB/db";
+
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const db = new Database();
+const PORT = process.env.PORT;
 app.use(cors());
 app.use(express.json());
 app.use("/api", router);
@@ -19,6 +22,11 @@ initCache()
     console.error("Error connecting to Redis:", err);
   });
 
+db.checkConnection()
+  .then()
+  .catch((err: any) => {
+    console.error("Error connecting to database:", err);
+  });
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });

@@ -1,5 +1,6 @@
 import { createClient } from "redis";
-
+import dotenv from "dotenv";
+dotenv.config();
 
 type RouteCacheData = {
   polyline: string;
@@ -93,7 +94,7 @@ export const cacheRoute = async (
   routeData: RouteCacheData
 ) => {
   try {
-    const routeKey = `${KEY_PREFIX}route:${roundedKey(startLat)},${roundedKey(
+    const routeKey = `${KEY_PREFIX}:${roundedKey(startLat)},${roundedKey(
       startLon
     )}:${roundedKey(endLat)},${roundedKey(endLon)}`;
     await redisClient.set(routeKey, JSON.stringify(routeData), {
@@ -103,4 +104,3 @@ export const cacheRoute = async (
     console.error("Error caching route:", err);
   }
 };
-

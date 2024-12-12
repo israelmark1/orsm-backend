@@ -1,5 +1,7 @@
 import axios from "axios";
 import { cacheCoordinates, getCachedCoordinates } from "./redis";
+import dotenv from "dotenv";
+dotenv.config();
 
 export const geocodeAddress = async (address: string) => {
   console.log("Geocoding address:", address);
@@ -10,7 +12,6 @@ export const geocodeAddress = async (address: string) => {
     );
   }
 
-  // Check cache first
   const cached = await getCachedCoordinates(address);
   if (cached) {
     return cached;
