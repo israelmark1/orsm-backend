@@ -1,5 +1,5 @@
 {
-  "name": "node-postgres-ts",
+  "name": "node-app",
   "version": "1.0.0",
   "description": "A simple Node.js application with TypeScript and PostgreSQL",
   "main": "index.js",
