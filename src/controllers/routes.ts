@@ -1,27 +1,9 @@
 import { Request, Response, Router } from "express";
-import axios from "axios";
 import { geocodeAddress } from "../services/nominatim";
 import { getRouteFromOSRM } from "../services/osrm";
+import { isInIsrael } from "../tools";
 
 const router: Router = Router();
-
-// Rough bounding box for Israel
-// These coordinates are approximate and may need refinement.
-const ISRAEL_BOUNDS = {
-  minLat: 29.0,
-  maxLat: 33.5,
-  minLon: 34.0,
-  maxLon: 35.9,
-};
-
-function isInIsrael(lat: number, lon: number): boolean {
-  return (
-    lat >= ISRAEL_BOUNDS.minLat &&
-    lat <= ISRAEL_BOUNDS.maxLat &&
-    lon >= ISRAEL_BOUNDS.minLon &&
-    lon <= ISRAEL_BOUNDS.maxLon
-  );
-}
 
 router.get("/routeByCoordinate", async (req: Request, res: Response) => {
   const { startLat, startLon, endLat, endLon } = req.query;
@@ -36,7 +18,6 @@ router.get("/routeByCoordinate", async (req: Request, res: Response) => {
   const endLatNum = Number(endLat);
   const endLonNum = Number(endLon);
 
-  // Check if both start and end coordinates are inside Israel
   if (
     !isInIsrael(startLatNum, startLonNum) ||
     !isInIsrael(endLatNum, endLonNum)
@@ -73,6 +54,10 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
     return;
   }
 
+  if (typeof startAddress !== "string" || typeof endAddress !== "string") {
+    res.status(400).json({ error: "Invalid address format" });
+    return;
+  }
   try {
     const startCoords = await geocodeAddress(startAddress as string);
     const endCoords = await geocodeAddress(endAddress as string);

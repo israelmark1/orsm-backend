@@ -9,16 +9,17 @@ services:
     volumes:
       - ./src:/usr/src/app/src
       - ./data:/usr/src/app/data
-      - /usr/src/app/node_modules
     environment:
       - PORT=3000
       - ORSM_URL=http://osrm:5000/route/v1/driving/
+      - REDIS_PORT=6379
+      - REDIS_HOST=redis
     depends_on:
       - osrm
     command: npm run dev
 
   osrm:
-    image: osrm/osrm-backend
+    image: osrm/osrm-backend:v5.26.0
     container_name: osrm
     volumes:
       - ./data:/data
@@ -35,7 +36,7 @@ services:
       - redis_data:/data
     environment:
       - REDIS_PORT=6379
-      - REDIS_HOST=localhost
+      - REDIS_HOST=redis
     command: ["redis-server", "--appendonly", "yes"]
 
 volumes:
