@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { getRouteFromOSRM } from "../services/osrm";
 import { isInIsrael } from "../tools";
 import { Database } from "../DB/db";
+import { geocodeAddress } from "../services/nominatim";
 const db = new Database();
 
 const router: Router = Router();
@@ -60,14 +61,18 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const startCoords = await db.getCoordinates(startAddress as string);
-    const endCoords = await db.getCoordinates(endAddress as string);
+    let startCoords = await db.getCoordinates(startAddress as string);
+    let endCoords = await db.getCoordinates(endAddress as string);
 
     if (!startCoords || !endCoords) {
-      res
-        .status(404)
-        .json({ error: "Unable to geocode one of the addresses." });
-      return;
+      startCoords = await geocodeAddress(startAddress);
+      endCoords = await geocodeAddress(endAddress);
+      if (!startCoords || !endCoords) {
+        res
+          .status(404)
+          .json({ error: "Unable to geocode one of the addresses." });
+        return;
+      }
     }
 
     const routeData = await getRouteFromOSRM(startCoords, endCoords);
