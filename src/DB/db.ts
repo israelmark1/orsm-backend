@@ -2,6 +2,7 @@ import { Pool, PoolClient } from "pg";
 import { cacheCoordinates, getCachedCoordinates } from "../services/redis";
 import { isInIsrael } from "../tools";
 
+
 type Coordinates = {
   lat: number;
   lon: number;
@@ -19,9 +20,12 @@ export class Database {
       port: parseInt(process.env.DB_PORT || "5432"),
     });
   }
+
+ 
   private async getClient(): Promise<PoolClient> {
     return await this.pool.connect();
   }
+
 
   public async checkConnection() {
     try {
@@ -33,6 +37,7 @@ export class Database {
       throw new Error("Unable to connect to the database");
     }
   }
+
   private async queryCoordinates(
     client: PoolClient,
     address: string,
@@ -45,24 +50,26 @@ export class Database {
         : transformFunction;
 
     const query = `
-    SELECT 
-      ST_X(${geometryFunction}) AS lon,
-      ST_Y(${geometryFunction}) AS lat
-    FROM ${table}
-    WHERE name ILIKE $1
-    LIMIT 1;
-  `;
+      SELECT 
+        ST_X(${geometryFunction}) AS lon,
+        ST_Y(${geometryFunction}) AS lat
+      FROM ${table}
+      WHERE name ILIKE $1 OR place ILIKE $1
+      LIMIT 1;
+    `;
 
     try {
-      console.log(`Querying ${table} for address: ${address}`);
-      const res = await client.query(query, [`%${address}%`]);
+      const values = [`%${address}%`];
+      const res = await client.query(query, values);
 
       if (res.rows.length > 0) {
         console.log("Coordinates found:", res.rows[0]);
         const { lat, lon } = res.rows[0];
         return { lat, lon };
       } else {
-        console.log("No coordinates found for address:", address);
+        console.log(
+          `No coordinates found in table "${table}" for the address: "${address}".`
+        );
         return null;
       }
     } catch (error: any) {
@@ -76,52 +83,54 @@ export class Database {
       throw new Error("Address is required");
     }
 
-    const cached = await getCachedCoordinates(address);
+    const cached = await getCachedCoordinates(address.trim());
     if (cached && isInIsrael(cached.lat, cached.lon)) {
+      console.log(`Returning cached coordinates for "${address}":`, cached);
       return cached;
     }
 
     const client = await this.getClient();
     try {
-      console.log("Trying planet_osm_line");
-      let coords = await this.queryCoordinates(
-        client,
-        address,
-        "planet_osm_line",
-        "ST_Transform(way, 4326)"
-      );
+      console.log(`Attempting to find coordinates for address: "${address}"`);
 
-      if (!coords) {
-        console.log("Trying planet_osm_point");
+      const tables = [
+        { table: "planet_osm_line", transform: "ST_Transform(way, 4326)" },
+        { table: "planet_osm_point", transform: "ST_Transform(way, 4326)" },
+        {
+          table: "planet_osm_polygon",
+          transform: "ST_Centroid(ST_Transform(way, 4326))",
+        },
+      ];
+
+      let coords: Coordinates | null = null;
+
+      for (const { table, transform } of tables) {
+        console.log(`Querying table: ${table}`);
         coords = await this.queryCoordinates(
           client,
-          address,
-          "planet_osm_point",
-          "ST_Transform(way, 4326)"
+          address.trim(),
+          table,
+          transform
         );
-      }
-
-      if (!coords) {
-        console.log("Trying planet_osm_polygon");
-        coords = await this.queryCoordinates(
-          client,
-          address,
-          "planet_osm_polygon",
-          "ST_Centroid(ST_Transform(way, 4326))"
-        );
+        if (coords) break;
       }
 
       if (coords && isInIsrael(coords.lat, coords.lon)) {
+        console.log(`Coordinates found and are in Israel:`, coords);
         await cacheCoordinates(address, coords.lat, coords.lon);
         return coords;
       } else {
-        console.warn("Coordinates are not found:", coords);
+        console.warn(
+          `Coordinates not found or outside Israel for address: "${address}"`
+        );
       }
+
       return null;
     } finally {
       client.release();
     }
   }
+
 
   public async close() {
     await this.pool.end();

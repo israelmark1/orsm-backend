@@ -62,15 +62,20 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
   }
   try {
     let startCoords = await db.getCoordinates(startAddress as string);
+    if (!startCoords) {
+      startCoords = await geocodeAddress(startAddress);
+      if (!startCoords) {
+        res.status(404).json({ error: "Unable to geocode start address." });
+        return;
+      }
+    }
     let endCoords = await db.getCoordinates(endAddress as string);
 
-    if (!startCoords || !endCoords) {
-      startCoords = await geocodeAddress(startAddress);
+    console.log("startCoords:", startCoords, "endCoords:", endCoords);
+    if (!endCoords) {
       endCoords = await geocodeAddress(endAddress);
-      if (!startCoords || !endCoords) {
-        res
-          .status(404)
-          .json({ error: "Unable to geocode one of the addresses." });
+      if (!endCoords) {
+        res.status(404).json({ error: "Unable to geocode end address." });
         return;
       }
     }
