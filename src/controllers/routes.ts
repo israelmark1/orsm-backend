@@ -71,7 +71,6 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
     }
     let endCoords = await db.getCoordinates(endAddress as string);
 
-    console.log("startCoords:", startCoords, "endCoords:", endCoords);
     if (!endCoords) {
       endCoords = await geocodeAddress(endAddress);
       if (!endCoords) {
@@ -79,6 +78,7 @@ router.get("/routeByAddress", async (req: Request, res: Response) => {
         return;
       }
     }
+    console.log("startCoords:", startCoords, "endCoords:", endCoords);
 
     const routeData = await getRouteFromOSRM(startCoords, endCoords);
     res.json(routeData);

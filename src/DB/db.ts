@@ -2,7 +2,6 @@ import { Pool, PoolClient } from "pg";
 import { cacheCoordinates, getCachedCoordinates } from "../services/redis";
 import { isInIsrael } from "../tools";
 
-
 type Coordinates = {
   lat: number;
   lon: number;
@@ -21,11 +20,9 @@ export class Database {
     });
   }
 
- 
   private async getClient(): Promise<PoolClient> {
     return await this.pool.connect();
   }
-
 
   public async checkConnection() {
     try {
@@ -50,28 +47,28 @@ export class Database {
         : transformFunction;
 
     const query = `
-      SELECT 
-        ST_X(${geometryFunction}) AS lon,
-        ST_Y(${geometryFunction}) AS lat
-      FROM ${table}
-      WHERE name ILIKE $1 OR place ILIKE $1
-      LIMIT 1;
-    `;
+    SELECT 
+      ST_X(${geometryFunction}) AS lon,
+      ST_Y(${geometryFunction}) AS lat
+    FROM ${table}
+    WHERE 
+      name ILIKE $1 OR 
+      place ILIKE $1 OR 
+      tags->'name:en' ILIKE $1 OR
+      tags->'name:he' ILIKE $1 OR
+      tags->'alt_name' ILIKE $1
+    LIMIT 1;
+  `;
 
     try {
       const values = [`%${address}%`];
       const res = await client.query(query, values);
 
       if (res.rows.length > 0) {
-        console.log("Coordinates found:", res.rows[0]);
         const { lat, lon } = res.rows[0];
         return { lat, lon };
-      } else {
-        console.log(
-          `No coordinates found in table "${table}" for the address: "${address}".`
-        );
-        return null;
       }
+      return null;
     } catch (error: any) {
       console.error("Error querying coordinates:", error.message);
       throw new Error("Unable to query coordinates");
@@ -94,12 +91,12 @@ export class Database {
       console.log(`Attempting to find coordinates for address: "${address}"`);
 
       const tables = [
-        { table: "planet_osm_line", transform: "ST_Transform(way, 4326)" },
         { table: "planet_osm_point", transform: "ST_Transform(way, 4326)" },
         {
           table: "planet_osm_polygon",
           transform: "ST_Centroid(ST_Transform(way, 4326))",
         },
+        { table: "planet_osm_line", transform: "ST_Transform(way, 4326)" },
       ];
 
       let coords: Coordinates | null = null;
@@ -130,7 +127,6 @@ export class Database {
       client.release();
     }
   }
-
 
   public async close() {
     await this.pool.end();
