@@ -1,51 +1,31 @@
 import { Request, Response, Router } from "express";
 import { getRouteFromOSRM } from "../services/osrm";
-import { isInIsrael } from "../tools";
-import { Database } from "../DB/db";
+import Database from "../DB/db";
 import { geocodeAddress } from "../services/nominatim";
+import { validateCoordinates } from "../middlewares/validateCoordinates";
 const db = new Database();
 
 const router: Router = Router();
 
-router.get("/routeByCoordinate", async (req: Request, res: Response) => {
-  const { startLat, startLon, endLat, endLon } = req.query;
+router.get(
+  "/routeByCoordinate",
+  validateCoordinates,
+  async (req: Request, res: Response) => {
+    const { startCoords, endCoords } = req as any;
 
-  if (!startLat || !startLon || !endLat || !endLon) {
-    res.status(400).json({ error: "Missing coordinates" });
-    return;
-  }
-
-  const startLatNum = Number(startLat);
-  const startLonNum = Number(startLon);
-  const endLatNum = Number(endLat);
-  const endLonNum = Number(endLon);
-
-  if (
-    !isInIsrael(startLatNum, startLonNum) ||
-    !isInIsrael(endLatNum, endLonNum)
-  ) {
-    res.status(400).json({ error: "Coordinates are not within Israel" });
-    return;
-  }
-
-  try {
-    const result = await getRouteFromOSRM(
-      { lat: startLatNum, lon: startLonNum },
-      { lat: endLatNum, lon: endLonNum }
-    );
-    if (result) {
-      res.json(result);
-    } else {
-      res.status(404).json({ error: "No route found" });
-      return;
+    try {
+      const result = await getRouteFromOSRM(startCoords, endCoords);
+      if (result) {
+        res.json(result);
+      } else {
+        res.status(404).json({ error: "No route found" });
+      }
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: "Internal Server Error" });
     }
-  } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
-    return;
   }
-});
-
+);
 router.get("/routeByAddress", async (req: Request, res: Response) => {
   const { startAddress, endAddress } = req.query;
 

@@ -1,9 +1,10 @@
 import express from "express";
 import dotenv from "dotenv";
-import router from "./controllers/routes";
+import router from "./routes/routes";
 import cors from "cors";
 import { initCache } from "./services/redis";
-import { Database } from "./DB/db";
+import Database from "./DB/db";
+import { errorHandler } from "./middlewares/errorHandler";
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ const PORT = process.env.PORT;
 app.use(cors());
 app.use(express.json());
 app.use("/api", router);
+app.use(errorHandler);
 
 initCache()
   .then(() => {

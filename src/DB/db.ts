@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from "pg";
+import { Pool, PoolClient, QueryResult } from "pg";
 import { cacheCoordinates, getCachedCoordinates } from "../services/redis";
 import { isInIsrael } from "../tools";
 
@@ -7,31 +7,51 @@ type Coordinates = {
   lon: number;
 };
 
-export class Database {
+type TableQueryConfig = {
+  table: string;
+  transform: string;
+};
+
+class Database {
   private pool: Pool;
 
   constructor() {
+    const dbUser = process.env.DB_USER;
+    const dbHost = process.env.DB_HOST;
+    const dbName = process.env.DB_NAME;
+    const dbPassword = process.env.DB_PASSWORD;
+    const dbPort = parseInt(process.env.DB_PORT ?? "5432", 10);
+
+    if (!dbUser || !dbHost || !dbName || !dbPassword) {
+      throw new Error("Database environment variables are not properly set.");
+    }
+
     this.pool = new Pool({
-      user: process.env.DB_USER,
-      host: process.env.DB_HOST,
-      database: process.env.DB_NAME,
-      password: process.env.DB_PASSWORD,
-      port: parseInt(process.env.DB_PORT || "5432"),
+      user: dbUser,
+      host: dbHost,
+      database: dbName,
+      password: dbPassword,
+      port: dbPort,
     });
   }
 
   private async getClient(): Promise<PoolClient> {
-    return await this.pool.connect();
+    return this.pool.connect();
   }
 
-  public async checkConnection() {
+  public async checkConnection(): Promise<void> {
+    let client: PoolClient | null = null;
     try {
-      const client = await this.pool.connect();
-      client.release();
+      client = await this.pool.connect();
       console.log("Postgres DB connection successful!");
-    } catch (error: any) {
-      console.error("Postgres DB connection failed:", error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Postgres DB connection failed:", message);
       throw new Error("Unable to connect to the database");
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 
@@ -46,57 +66,84 @@ export class Database {
         ? `ST_Centroid(${transformFunction})`
         : transformFunction;
 
-    const query = `
-    SELECT 
-      ST_X(${geometryFunction}) AS lon,
-      ST_Y(${geometryFunction}) AS lat
-    FROM ${table}
-    WHERE 
-      name ILIKE $1 OR 
-      place ILIKE $1 OR 
-      tags->'name:en' ILIKE $1 OR
-      tags->'name:he' ILIKE $1 OR
-      tags->'alt_name' ILIKE $1
-    LIMIT 1;
-  `;
+    const queries = [
+      {
+        text: `
+          SELECT ST_X(${geometryFunction}) AS lon, ST_Y(${geometryFunction}) AS lat
+          FROM ${table}
+          WHERE name = $1
+          LIMIT 1;
+        `,
+        values: [address],
+      },
+      {
+        text: `
+          SELECT ST_X(${geometryFunction}) AS lon, ST_Y(${geometryFunction}) AS lat
+          FROM ${table}
+          WHERE name ILIKE $1
+          LIMIT 1;
+        `,
+        values: [`%${address}%`],
+      },
+      {
+        text: `
+          SELECT ST_X(${geometryFunction}) AS lon, ST_Y(${geometryFunction}) AS lat
+          FROM ${table}
+          WHERE 
+            place ILIKE $1 OR 
+            tags->'name:en' ILIKE $1 OR
+            tags->'name:he' ILIKE $1 OR
+            tags->'alt_name' ILIKE $1
+          LIMIT 1;
+        `,
+        values: [`%${address}%`],
+      },
+    ];
 
     try {
-      const values = [`%${address}%`];
-      const res = await client.query(query, values);
-
-      if (res.rows.length > 0) {
-        const { lat, lon } = res.rows[0];
-        return { lat, lon };
+      for (const query of queries) {
+        const res: QueryResult = await client.query(query.text, query.values);
+        if (res.rows.length > 0) {
+          const { lat, lon } = res.rows[0];
+          if (typeof lat === "number" && typeof lon === "number") {
+            return { lat, lon };
+          } else {
+            console.warn(
+              "Query returned invalid coordinate types for address:",
+              address
+            );
+          }
+        }
       }
+
       return null;
-    } catch (error: any) {
-      console.error("Error querying coordinates:", error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Error querying coordinates:", message);
       throw new Error("Unable to query coordinates");
     }
   }
-
   public async getCoordinates(address: string): Promise<Coordinates | null> {
     if (!address || typeof address !== "string" || address.trim() === "") {
       throw new Error("Address is required");
     }
 
-    const cached = await getCachedCoordinates(address.trim());
+    const trimmedAddress = address.trim();
+    const cached = await getCachedCoordinates(trimmedAddress);
     if (cached && isInIsrael(cached.lat, cached.lon)) {
       console.log(`Returning cached coordinates for "${address}":`, cached);
       return cached;
     }
 
-    const client = await this.getClient();
+    let client: PoolClient | null = null;
     try {
+      client = await this.getClient();
       console.log(`Attempting to find coordinates for address: "${address}"`);
 
-      const tables = [
+      const tables: TableQueryConfig[] = [
         { table: "planet_osm_point", transform: "ST_Transform(way, 4326)" },
-        {
-          table: "planet_osm_polygon",
-          transform: "ST_Centroid(ST_Transform(way, 4326))",
-        },
-        { table: "planet_osm_line", transform: "ST_Transform(way, 4326)" },
+        // { table: "planet_osm_polygon", transform: "ST_Centroid(ST_Transform(way, 4326))" },
+        // { table: "planet_osm_line", transform: "ST_Transform(way, 4326)" },
       ];
 
       let coords: Coordinates | null = null;
@@ -105,30 +152,39 @@ export class Database {
         console.log(`Querying table: ${table}`);
         coords = await this.queryCoordinates(
           client,
-          address.trim(),
+          trimmedAddress,
           table,
           transform
         );
-        if (coords) break;
+        if (coords !== null) {
+          break;
+        }
       }
 
       if (coords && isInIsrael(coords.lat, coords.lon)) {
-        console.log(`Coordinates found and are in Israel:`, coords);
-        await cacheCoordinates(address, coords.lat, coords.lon);
+        console.log("Coordinates found and are in Israel:", coords);
+        await cacheCoordinates(trimmedAddress, coords.lat, coords.lon);
         return coords;
       } else {
         console.warn(
           `Coordinates not found or outside Israel for address: "${address}"`
         );
+        return null;
       }
-
-      return null;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Error in getCoordinates:", message);
+      throw new Error("Error retrieving coordinates from DB");
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   }
 
-  public async close() {
+  public async close(): Promise<void> {
     await this.pool.end();
   }
 }
+
+export default Database;
