@@ -43,7 +43,7 @@ export const getCachedCoordinates = async (
 ): Promise<{ lat: number; lon: number } | null> => {
   try {
     const data = await redisClient.get(
-      `${KEY_PREFIX}address:${address.toLowerCase()}`
+      `${KEY_PREFIX}:${address.toLowerCase()}`
     );
     return data ? JSON.parse(data) : null;
   } catch (err) {
@@ -59,7 +59,7 @@ export const cacheCoordinates = async (
 ) => {
   try {
     await redisClient.set(
-      `${KEY_PREFIX}address:${address.toLowerCase()}`,
+      `${KEY_PREFIX}:${address.toLowerCase()}`,
       JSON.stringify({ lat, lon }),
       { EX: CACHE_EXPIRY }
     );
@@ -75,7 +75,7 @@ export const getCachedRoute = async (
   endLon: number
 ): Promise<RouteCacheData | null> => {
   try {
-    const routeKey = `${KEY_PREFIX}route:${roundedKey(startLat)},${roundedKey(
+    const routeKey = `${KEY_PREFIX}:${roundedKey(startLat)},${roundedKey(
       startLon
     )}:${roundedKey(endLat)},${roundedKey(endLon)}`;
     const data = await redisClient.get(routeKey);

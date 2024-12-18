@@ -1,11 +1,7 @@
 import { Pool, PoolClient, QueryResult } from "pg";
 import { cacheCoordinates, getCachedCoordinates } from "../services/redis";
 import { isInIsrael } from "../tools";
-
-type Coordinates = {
-  lat: number;
-  lon: number;
-};
+import { Coordinates } from "../types/coordinates";
 
 type TableQueryConfig = {
   table: string;
